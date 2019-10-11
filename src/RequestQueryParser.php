@@ -34,14 +34,14 @@ class RequestQueryParser implements RequestQueryParserInterface
     {
         if ($request->has('filter')) {
             foreach ($request->get('filter') as $filter) {
-                $filterDatas = explode(':', $filter, 3);
+                $filterDatas = explode(':', $filter, 4);
 
                 if (count($filterDatas) < 3) {
                     throw new UnprocessableEntityHttpException('Filter must contains field and value!');
                 }
-                list($field, $operator, $value) = $filterDatas;
+                list($field, $operator, $value, $method) = $filterDatas;
 
-                $this->requestParams->addFilter(new Filter($field, $operator, $value));
+                $this->requestParams->addFilter(new Filter($field, $operator, $value, ($method ?: 'where')));
             }
         }
     }

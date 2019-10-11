@@ -53,7 +53,7 @@ trait BuilderParamsApplierTrait
         $field = sprintf('%s.%s', $table, $filter->getField());
         $operator = $filter->getOperator();
         $value = $filter->getValue();
-        $method = 'where';
+        $method = ($filter->getMethod() ?: 'where');
         $clauseOperator = null;
         $databaseField = null;
 

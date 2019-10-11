@@ -7,12 +7,14 @@ class Filter implements FilterInterface
     protected $field;
     protected $operator;
     protected $value;
+    protected $method;
 
-    public function __construct(string $field, string $operator, string $value)
+    public function __construct(string $field, string $operator, string $value, string $method)
     {
         $this->setField($field);
         $this->setOperator($operator);
         $this->setValue($value);
+        $this->setMethod($value);
     }
 
     public function setField(string $field): void
@@ -43,5 +45,15 @@ class Filter implements FilterInterface
     public function getValue(): string
     {
         return $this->value;
+    }
+
+    public function setMethod(string $method): void
+    {
+        $this->method = $method;
+    }
+
+    public function getMethod(): string
+    {
+        return $this->method;
     }
 }

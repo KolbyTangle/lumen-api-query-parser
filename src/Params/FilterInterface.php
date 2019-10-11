@@ -9,4 +9,7 @@ interface FilterInterface
     public function getOperator(): string;
 
     public function getValue(): string;
+
+    public function getMethod(): string;
+
 }
