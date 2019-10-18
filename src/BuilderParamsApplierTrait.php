@@ -100,12 +100,12 @@ trait BuilderParamsApplierTrait
             $query->whereIn($filter, explode('|', $value));
         } else {
 
-            $relation = $this->getRelationFromField($field);
+            $connection = $this->getConnectionFromField($field);
             $field = $this->parseField($field);
 
-            if($relation) {
+            if($connection) {
 
-                $query->whereHas($relation, function( $q ) use ($field, $method, $clauseOperator, $value) {
+                $query->whereHas($connection, function( $q ) use ($field, $method, $clauseOperator, $value) {
                     $q->{$method}($field, $clauseOperator, $value);
                 });
 
@@ -134,7 +134,7 @@ trait BuilderParamsApplierTrait
         return $field;
     }
 
-    protected function getRelationFromField($field)
+    protected function getConnectionFromField($field)
     {
         if(strpos($field, '.') !== false) {
             $temp = (explode('.', $field) ?: []);
@@ -142,8 +142,7 @@ trait BuilderParamsApplierTrait
             $temp = array_map(function($v) {
                 return lcfirst(str_replace('_', '', ucwords($v, '_')));
             }, $temp);
-            $relation = implode('.', $temp);
-            return $relation;
+            return implode('.', $temp);
         }
         return null;
     }
