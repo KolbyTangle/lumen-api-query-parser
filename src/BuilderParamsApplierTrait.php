@@ -99,14 +99,52 @@ trait BuilderParamsApplierTrait
         if ($operator === 'in') {
             $query->whereIn($filter, explode('|', $value));
         } else {
-            call_user_func_array([$query, $method], [
-                $field, $clauseOperator, $value
-            ]);
+
+            $relation = $this->getRelationFromField($field);
+            $field = $this->parseField($field);
+
+            if($relation) {
+
+                $query->whereHas($relation, function( $q ) use ($field, $method, $clauseOperator, $value) {
+                    $q->{$method}($field, $clauseOperator, $value);
+                });
+
+            } else {
+
+                call_user_func_array([$query, $method], [
+                    $field, $clauseOperator, $value
+                ]);
+
+            }
+
         }
     }
 
     protected function applySort(Builder $query, Sort $sort)
     {
         $query->orderBy($sort->getField(), $sort->getDirection());
+    }
+
+    protected function parseField($field)
+    {
+        if(strpos($field, '.') !== false) {
+            $temp = (explode('.', $field) ?: []);
+            return array_pop($temp);
+        }
+        return $field;
+    }
+
+    protected function getRelationFromField($field)
+    {
+        if(strpos($field, '.') !== false) {
+            $temp = (explode('.', $field) ?: []);
+            array_pop($temp);
+            $temp = array_map(function($v) {
+                return lcfirst(str_replace('_', '', ucwords($v, '_')));
+            }, $temp);
+            $relation = implode('.', $temp);
+            return $relation;
+        }
+        return null;
     }
 }
