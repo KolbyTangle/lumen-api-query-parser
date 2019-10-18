@@ -14,7 +14,7 @@ class Filter implements FilterInterface
         $this->setField($field);
         $this->setOperator($operator);
         $this->setValue($value);
-        $this->setMethod($value);
+        $this->setMethod($method);
     }
 
     public function setField(string $field): void
