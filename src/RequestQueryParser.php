@@ -65,7 +65,7 @@ class RequestQueryParser implements RequestQueryParserInterface
     {
         if ($request->has('limit')) {
             $limit = (int) $request->get('limit');
-            $page = (int) ($request->has('page') ? $request->get('page') : 1);
+            $page = (int) ($request->has('page') ? $request->get('page') : 0);
 
             $this->requestParams->addPagination(new Pagination($limit, $page));
         }
