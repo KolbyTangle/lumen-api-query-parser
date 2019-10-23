@@ -50,7 +50,7 @@ trait BuilderParamsApplierTrait
     protected function applyFilter(Builder $query, Filter $filter): void
     {
         //$table = $query->getModel()->getTable();
-        $filter->getField();
+        $field = $filter->getField();
         //$field = sprintf('%s.%s', $table, $filter->getField());
         $operator = $filter->getOperator();
         $value = $filter->getValue();
