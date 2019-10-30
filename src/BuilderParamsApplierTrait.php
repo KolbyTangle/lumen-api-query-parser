@@ -39,9 +39,16 @@ trait BuilderParamsApplierTrait
             }
         }
 
+        $connection_sorts = [];
         if ($params->hasSort()) {
             foreach ($params->getSorts() as $sort) {
-                $this->applySort($query, $sort);
+                if(strpos($sort->getField(), '.') !== false) {
+                    $pieces = explode('.', $sort->getField());
+                    $field = array_pop($pieces);
+                    $connection_sorts[implode('.', $pieces)] = [$field, $sort->getDirection()];
+                } else {
+                    $this->applySort($query, $sort);
+                }
             }
         }
 
@@ -54,6 +61,17 @@ trait BuilderParamsApplierTrait
                     $with[$connectionName] = function($q) use($filters) {
                         foreach($filters as $filter) {
                             $this->applyFilter($q->getQuery(), $filter);
+                        }
+                    };
+                } else if(isset($connection_sorts[$connectionName]) && count($connection_sorts[$connectionName])) {
+                    $sort_values = $connection_sorts[$connectionName];
+                    $with[$connectionName] = function($q) use ($sort_values) {
+                        if(count($sort_values) == 2) {
+                            if($sort_values[1] === 'DESC') {
+                                $q->orderByDesc($sort_values[0]);
+                            } else {
+                                $q->orderBy($sort_values[0]);
+                            }
                         }
                     };
                 } else {
