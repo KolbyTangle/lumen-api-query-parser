@@ -4,6 +4,7 @@ namespace LumenApiQueryParser\Provider;
 
 use Illuminate\Database\Eloquent\Builder;
 use LumenApiQueryParser\Params\Filter;
+use LumenApiQueryParser\Utility\ConnectionParser;
 
 class FieldComponentProvider
 {

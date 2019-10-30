@@ -7,9 +7,9 @@ use Illuminate\Database\Eloquent\Builder;
 use LumenApiQueryParser\Params\Filter;
 use LumenApiQueryParser\Params\RequestParamsInterface;
 use LumenApiQueryParser\Params\Sort;
-use LumenApiQueryParser\Provider\ConnectionParser;
 use LumenApiQueryParser\Provider\FieldComponentProvider;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use LumenApiQueryParser\Utility\ConnectionParser;
 
 trait BuilderParamsApplierTrait
 {
@@ -80,7 +80,7 @@ trait BuilderParamsApplierTrait
             $filters = isset($connection_filters[$connectionName]) ? $connection_filters[$connectionName] : [];
             $sorts = isset($connection_sorts[$connectionName]) ? $connection_sorts[$connectionName] : [];
             if(count($filters) || count($sorts)) {
-                $with[$connectionName] = function($q) use($filters, $sorts) {
+                $query->whereHas($connectionName, function($q) use($filters, $sorts) {
                     foreach($filters as $filter) {
                         $this->applyFilter($q, $filter);
                     }
@@ -93,7 +93,7 @@ trait BuilderParamsApplierTrait
                             }
                         }
                     }
-                };
+                });
             }
         }
         if(count($with)) {

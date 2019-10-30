@@ -1,6 +1,6 @@
 <?php
 
-namespace LumenApiQueryParser\Provider;
+namespace LumenApiQueryParser\Utility;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -106,8 +106,11 @@ class ConnectionParser
             return $context::snakeCaseToCamelCase($v);
         }, $parts);
         $temp = $model;
-        foreach($parts as $connection) {
+        foreach($parts as $index => $connection) {
             if(!method_exists($temp, $connection)) {
+                if(count($parts) == (int)$index+1) {
+                    break;
+                }
                 $this->errors[] = 'Method does not exist: ' . $temp . '::' . $connection . '()';
                 return [];
             }
