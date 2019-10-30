@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use LumenApiQueryParser\Params\Filter;
 use LumenApiQueryParser\Params\RequestParamsInterface;
 use LumenApiQueryParser\Params\Sort;
+use LumenApiQueryParser\Provider\ConnectionParser;
 use LumenApiQueryParser\Provider\FieldComponentProvider;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
@@ -21,13 +22,12 @@ trait BuilderParamsApplierTrait
             foreach ($params->getFilters() as $filter) {
                 $fieldProvider = new FieldComponentProvider($query, $filter);
                 if($fieldProvider->hasConnections()) {
-                    $connections = $fieldProvider->getConnections();
-                    $connectionName = implode('.', $connections);
+                    $connectionName = $fieldProvider->getConnectionString();
                     if($filter->getOperator() === 'has') {
                         $filter->setField($connectionName);
                         $this->applyFilter($query, $filter);
                     } else {
-                        $filter->setField($fieldProvider->getConnectionField());
+                        $filter->setField($fieldProvider->getField());
                         if(!isset($connection_filters[$connectionName])) {
                             $connection_filters[$connectionName] = [];
                         }
@@ -41,43 +41,62 @@ trait BuilderParamsApplierTrait
 
         $connection_sorts = [];
         if ($params->hasSort()) {
-            foreach ($params->getSorts() as $sort) {
-                if(strpos($sort->getField(), '.') !== false) {
+            foreach($params->getSorts() as $sort) {
+                $parser = new ConnectionParser($query, $sort->getField());
+                if($parser->hasConnections()) {
+                    $connectionName = $parser->getConnectionString();
+                    if(!isset($connection_sorts[$connectionName])) {
+                        $connection_sorts[$connectionName] = [];
+                    }
                     $pieces = explode('.', $sort->getField());
                     $field = array_pop($pieces);
-                    $connection_sorts[implode('.', $pieces)] = [$field, $sort->getDirection()];
+                    $connection_sorts[$connectionName][] = [$field, $sort->getDirection()];
                 } else {
                     $this->applySort($query, $sort);
                 }
             }
         }
 
+        $with = [];
         if ($params->hasConnection()) {
-            $with = [];
             foreach ($params->getConnections() as $connection) {
                 $connectionName = $connection->getName();
-                if(isset($connection_filters[$connectionName]) && count($connection_filters[$connectionName])) {
-                    $filters = $connection_filters[$connectionName];
-                    $with[$connectionName] = function($q) use($filters) {
-                        foreach($filters as $filter) {
-                            $this->applyFilter($q->getQuery(), $filter);
-                        }
-                    };
-                } else if(isset($connection_sorts[$connectionName]) && count($connection_sorts[$connectionName])) {
-                    $sort_values = $connection_sorts[$connectionName];
-                    $with[$connectionName] = function($q) use ($sort_values) {
-                        if(count($sort_values) == 2) {
-                            if($sort_values[1] === 'DESC') {
-                                $q->orderByDesc($sort_values[0]);
-                            } else {
-                                $q->orderBy($sort_values[0]);
-                            }
-                        }
-                    };
+                $parser = new ConnectionParser($query, $connectionName);
+                $connectionName = $parser->getConnectionString();
+                if(isset($connection_filters[$connectionName])) {
+                    continue;
+                } else if(isset($connection_sorts[$connectionName])) {
+                    continue;
                 } else {
                     $with[] = $connectionName;
                 }
             }
+        }
+        $where_has_connections = array_merge(
+            ($connection_filters ? array_keys($connection_filters) : []),
+            ($connection_sorts ? array_keys($connection_sorts) : [])
+        );
+        foreach($where_has_connections as $connectionName) {
+            $filters = isset($connection_filters[$connectionName]) ? $connection_filters[$connectionName] : [];
+            $sorts = isset($connection_sorts[$connectionName]) ? $connection_sorts[$connectionName] : [];
+            if(count($filters) || count($sorts)) {
+                $with[$connectionName] = function($q) use($filters, $sorts) {
+                    foreach($filters as $filter) {
+                        $this->applyFilter($q, $filter);
+                    }
+                    foreach($sorts as $sort) {
+                        if(count($sort) == 2) {
+                            if($sort[1] === 'DESC') {
+                                $q->orderByDesc($sort[0]);
+                            } else {
+                                $q->orderBy($sort[0]);
+                            }
+                        }
+                    }
+                };
+            }
+        }
+        if(count($with)) {
             $query->with($with);
         }
 
@@ -92,6 +111,7 @@ trait BuilderParamsApplierTrait
         }
 
         return $paginator;
+
     }
 
     protected function applyFilter(Builder $query, Filter $filter): void
