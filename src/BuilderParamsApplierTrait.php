@@ -17,21 +17,32 @@ trait BuilderParamsApplierTrait
     public function applyParams(Builder $query, RequestParamsInterface $params): LengthAwarePaginator
     {
 
-        $connection_filters = [];
+        $connection_and_filters = [];
+        $connection_or_filters = [];
+
+        //:: Apply Basic Filters Or Set Connection Filters (whereHas, orWhereHas)
         if ($params->hasFilter()) {
             foreach ($params->getFilters() as $filter) {
                 $fieldProvider = new FieldComponentProvider($query, $filter);
-                if($fieldProvider->hasConnections()) {
+                if ($fieldProvider->hasConnections()) {
                     $connectionName = $fieldProvider->getConnectionString();
-                    if($filter->getOperator() === 'has') {
+                    if ($filter->getOperator() === 'has') {
                         $filter->setField($connectionName);
                         $this->applyFilter($query, $filter);
                     } else {
+                        $connectionMethod = strtolower($filter->getMethod());
                         $filter->setField($fieldProvider->getField());
-                        if(!isset($connection_filters[$connectionName])) {
-                            $connection_filters[$connectionName] = [];
+                        if ($connectionMethod === 'orwhere') {
+                            if(!isset($connection_or_filters[$connectionName])) {
+                                $connection_or_filters[$connectionName] = [];
+                            }
+                            $connection_or_filters[$connectionName][] = $filter;
+                        } else {
+                            if(!isset($connection_and_filters[$connectionName])) {
+                                $connection_and_filters[$connectionName] = [];
+                            }
+                            $connection_and_filters[$connectionName][] = $filter;
                         }
-                        $connection_filters[$connectionName][] = $filter;
                     }
                 } else {
                     $this->applyFilter($query, $filter);
@@ -39,13 +50,14 @@ trait BuilderParamsApplierTrait
             }
         }
 
+        //:: Apply Basic Sorts And Set Connection Sorts
         $connection_sorts = [];
         if ($params->hasSort()) {
-            foreach($params->getSorts() as $sort) {
+            foreach ($params->getSorts() as $sort) {
                 $parser = new ConnectionParser($query, $sort->getField());
-                if($parser->hasConnections()) {
+                if ($parser->hasConnections()) {
                     $connectionName = $parser->getConnectionString();
-                    if(!isset($connection_sorts[$connectionName])) {
+                    if (!isset($connection_sorts[$connectionName])) {
                         $connection_sorts[$connectionName] = [];
                     }
                     $pieces = explode('.', $sort->getField());
@@ -57,54 +69,142 @@ trait BuilderParamsApplierTrait
             }
         }
 
+        //:: Set Connections To Be Included
         $with = [];
         if ($params->hasConnection()) {
             foreach ($params->getConnections() as $connection) {
                 $connectionName = $connection->getName();
                 $parser = new ConnectionParser($query, $connectionName);
                 $connectionName = $parser->getConnectionString();
-                if(isset($connection_filters[$connectionName])) {
-                    continue;
-                } else if(isset($connection_sorts[$connectionName])) {
-                    continue;
-                } else {
-                    $with[] = $connectionName;
-                }
+                $with[] = $connectionName;
+                /**
+                 * if (isset($connection_filters[$connectionName])) {
+                 * continue;
+                 * } else if (isset($connection_sorts[$connectionName])) {
+                 * continue;
+                 * } else {
+                 * $with[] = $connectionName;
+                 * }
+                 */
             }
         }
+
+        //:: Apply whereHas Connections And Any Connection Sorts
         $where_has_connections = array_merge(
-            ($connection_filters ? array_keys($connection_filters) : []),
+            ($connection_and_filters ? array_keys($connection_and_filters) : []),
             ($connection_sorts ? array_keys($connection_sorts) : [])
         );
-        foreach($where_has_connections as $connectionName) {
-            $filters = isset($connection_filters[$connectionName]) ? $connection_filters[$connectionName] : [];
-            $sorts = isset($connection_sorts[$connectionName]) ? $connection_sorts[$connectionName] : [];
-            if(count($filters) || count($sorts)) {
-                $query->whereHas($connectionName, function($q) use($filters, $sorts) {
-                    foreach($filters as $filter) {
-                        $this->applyFilter($q, $filter);
-                    }
-                    foreach($sorts as $sort) {
-                        if(count($sort) == 2) {
-                            if($sort[1] === 'DESC') {
-                                $q->orderByDesc($sort[0]);
-                            } else {
-                                $q->orderBy($sort[0]);
+        if(count($where_has_connections)) {
+            $query->where(function ($connection_query) use ($where_has_connections, $connection_sorts, $connection_and_filters) {
+                foreach($where_has_connections as $connectionName) {
+                    $filters = isset($connection_filters[$connectionName]) ? $connection_and_filters[$connectionName] : [];
+                    $sorts = isset($connection_sorts[$connectionName]) ? $connection_sorts[$connectionName] : [];
+                    if (count($filters) || count($sorts)) {
+                        $connection_query->whereHas($connectionName, function ($q) use ($filters, $sorts) {
+                            foreach($filters as $filter) {
+                                $q->where(function ($inner_query) use ($filter) {
+                                    $this->applyFilter($inner_query, $filter);
+                                });
                             }
-                        }
+                            foreach($sorts as $sort) {
+                                if (count($sort) == 2) {
+                                    if ($sort[1] === 'DESC') {
+                                        $q->orderByDesc($sort[0]);
+                                    } else {
+                                        $q->orderBy($sort[0]);
+                                    }
+                                }
+                            }
+                        });
                     }
-                });
-            }
+                }
+            });
         }
+
+        //:: Apply whereOr Connections And Any Connection Sorts
+        $or_where_has_connections = array_merge(
+            ($connection_or_filters ? array_keys($connection_or_filters) : []),
+            ($connection_sorts ? array_keys($connection_sorts) : [])
+        );
+        if(count($where_has_connections)) {
+            $query->orWhere(function ($connection_query) use ($or_where_has_connections, $connection_sorts, $connection_or_filters) {
+                foreach($or_where_has_connections as $connectionName) {
+                    $filters = isset($connection_filters[$connectionName]) ? $connection_or_filters[$connectionName] : [];
+                    $sorts = isset($connection_sorts[$connectionName]) ? $connection_sorts[$connectionName] : [];
+                    if (count($filters) || count($sorts)) {
+                        $connection_query->orWhereHas($connectionName, function ($q) use ($filters, $sorts) {
+                            foreach($filters as $filter) {
+                                $q->where(function ($inner_query) use ($filter) {
+                                    $this->applyFilter($inner_query, $filter);
+                                });
+                            }
+                            foreach($sorts as $sort) {
+                                if (count($sort) == 2) {
+                                    if ($sort[1] === 'DESC') {
+                                        $q->orderByDesc($sort[0]);
+                                    } else {
+                                        $q->orderBy($sort[0]);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+        }
+
+        /*// check if we have where statements on the connection
+        if (count($where_has_connections)) {
+            $query->where(function ($connection_query) use (
+                $where_has_connections,
+                $connection_sorts,
+                $connection_filters,
+                $orwhere_filters
+            ) {
+
+                foreach ($where_has_connections as $connectionName) {
+                    $filters = isset($connection_filters[$connectionName]) ? $connection_filters[$connectionName] : [];
+                    $sorts = isset($connection_sorts[$connectionName]) ? $connection_sorts[$connectionName] : [];
+                    if (count($filters) || count($sorts)) {
+
+                        $connection_op = 'whereHas';
+                        if (isset($orwhere_filters[$connectionName])) {
+                            $connection_op = 'orWhereHas';
+                        }
+
+                        $connection_query->$connection_op($connectionName, function ($q) use ($filters, $sorts) {
+                            foreach ($filters as $filter) {
+                                $q->where(function ($q1) use ($filter) {
+                                    $this->applyFilter($q1, $filter);
+                                });
+                                //$this->applyFilter($q, $filter);
+
+                            }
+                            foreach ($sorts as $sort) {
+                                if (count($sort) == 2) {
+                                    if ($sort[1] === 'DESC') {
+                                        $q->orderByDesc($sort[0]);
+                                    } else {
+                                        $q->orderBy($sort[0]);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+        }*/
+
+        //:: Apply Connection Includes
         if(count($with)) {
             $query->with($with);
         }
 
+        //:: Apply Pagination
         if ($params->hasPagination()) {
             $pagination = $params->getPagination();
             $query->limit($pagination->getLimit());
             $query->offset($pagination->getPage() * $pagination->getLimit());
-
             $paginator = $query->paginate($params->getPagination()->getLimit(), ['*'], 'page', $params->getPagination()->getPage());
         } else {
             $paginator = $query->paginate($query->count(), ['*'], 'page', 1);
