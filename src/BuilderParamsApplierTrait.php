@@ -33,12 +33,12 @@ trait BuilderParamsApplierTrait
                         $connectionMethod = strtolower($filter->getMethod());
                         $filter->setField($fieldProvider->getField());
                         if ($connectionMethod === 'orwhere') {
-                            if(!isset($connection_or_filters[$connectionName])) {
+                            if (!isset($connection_or_filters[$connectionName])) {
                                 $connection_or_filters[$connectionName] = [];
                             }
                             $connection_or_filters[$connectionName][] = $filter;
                         } else {
-                            if(!isset($connection_and_filters[$connectionName])) {
+                            if (!isset($connection_and_filters[$connectionName])) {
                                 $connection_and_filters[$connectionName] = [];
                             }
                             $connection_and_filters[$connectionName][] = $filter;
@@ -94,19 +94,20 @@ trait BuilderParamsApplierTrait
             ($connection_and_filters ? array_keys($connection_and_filters) : []),
             ($connection_sorts ? array_keys($connection_sorts) : [])
         );
-        if(count($where_has_connections)) {
+
+        if (count($where_has_connections)) {
             $query->where(function ($connection_query) use ($where_has_connections, $connection_sorts, $connection_and_filters) {
-                foreach($where_has_connections as $connectionName) {
-                    $filters = isset($connection_filters[$connectionName]) ? $connection_and_filters[$connectionName] : [];
+                foreach ($where_has_connections as $connectionName) {
+                    $filters = isset($connection_and_filters[$connectionName]) ? $connection_and_filters[$connectionName] : [];
                     $sorts = isset($connection_sorts[$connectionName]) ? $connection_sorts[$connectionName] : [];
                     if (count($filters) || count($sorts)) {
                         $connection_query->whereHas($connectionName, function ($q) use ($filters, $sorts) {
-                            foreach($filters as $filter) {
+                            foreach ($filters as $filter) {
                                 $q->where(function ($inner_query) use ($filter) {
                                     $this->applyFilter($inner_query, $filter);
                                 });
                             }
-                            foreach($sorts as $sort) {
+                            foreach ($sorts as $sort) {
                                 if (count($sort) == 2) {
                                     if ($sort[1] === 'DESC') {
                                         $q->orderByDesc($sort[0]);
@@ -126,19 +127,20 @@ trait BuilderParamsApplierTrait
             ($connection_or_filters ? array_keys($connection_or_filters) : []),
             ($connection_sorts ? array_keys($connection_sorts) : [])
         );
-        if(count($where_has_connections)) {
+
+        if (count($or_where_has_connections)) {
             $query->orWhere(function ($connection_query) use ($or_where_has_connections, $connection_sorts, $connection_or_filters) {
-                foreach($or_where_has_connections as $connectionName) {
-                    $filters = isset($connection_filters[$connectionName]) ? $connection_or_filters[$connectionName] : [];
+                foreach ($or_where_has_connections as $connectionName) {
+                    $filters = isset($connection_or_filters[$connectionName]) ? $connection_or_filters[$connectionName] : [];
                     $sorts = isset($connection_sorts[$connectionName]) ? $connection_sorts[$connectionName] : [];
                     if (count($filters) || count($sorts)) {
                         $connection_query->orWhereHas($connectionName, function ($q) use ($filters, $sorts) {
-                            foreach($filters as $filter) {
+                            foreach ($filters as $filter) {
                                 $q->where(function ($inner_query) use ($filter) {
                                     $this->applyFilter($inner_query, $filter);
                                 });
                             }
-                            foreach($sorts as $sort) {
+                            foreach ($sorts as $sort) {
                                 if (count($sort) == 2) {
                                     if ($sort[1] === 'DESC') {
                                         $q->orderByDesc($sort[0]);
@@ -196,7 +198,7 @@ trait BuilderParamsApplierTrait
         }*/
 
         //:: Apply Connection Includes
-        if(count($with)) {
+        if (count($with)) {
             $query->with($with);
         }
 
@@ -209,6 +211,8 @@ trait BuilderParamsApplierTrait
         } else {
             $paginator = $query->paginate($query->count(), ['*'], 'page', 1);
         }
+
+        //print_r($query->toSql());
 
         return $paginator;
 
