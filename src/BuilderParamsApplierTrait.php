@@ -103,7 +103,14 @@ trait BuilderParamsApplierTrait
                     if (count($filters) || count($sorts)) {
                         $connection_query->whereHas($connectionName, function ($q) use ($filters, $sorts) {
                             foreach ($filters as $filter) {
-                                $q->where(function ($inner_query) use ($filter) {
+                                $q->where(function ($inner_query) use ($filter, $q) {
+
+                                    $filter->setField(
+                                        implode('.', [
+                                            $inner_query->getModel()->getTable(),
+                                            $filter->getField()
+                                        ])
+                                    );
                                     $this->applyFilter($inner_query, $filter);
                                 });
                             }
