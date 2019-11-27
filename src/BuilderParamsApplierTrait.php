@@ -90,9 +90,11 @@ trait BuilderParamsApplierTrait
         }
 
         //:: Apply whereHas Connections And Any Connection Sorts
-        $where_has_connections = array_merge(
-            ($connection_and_filters ? array_keys($connection_and_filters) : []),
-            ($connection_sorts ? array_keys($connection_sorts) : [])
+        $where_has_connections = array_unique(
+            array_merge(
+                ($connection_and_filters ? array_keys($connection_and_filters) : []),
+                []//($connection_sorts ? array_keys($connection_sorts) : [])
+            )
         );
 
         if (count($where_has_connections)) {
@@ -105,24 +107,39 @@ trait BuilderParamsApplierTrait
                             foreach ($filters as $filter) {
                                 $q->where(function ($inner_query) use ($filter, $q) {
 
-                                    $filter->setField(
-                                        implode('.', [
-                                            $inner_query->getModel()->getTable(),
-                                            $filter->getField()
-                                        ])
-                                    );
+                                    $table_prefix = $inner_query->getModel()->getTable() . '.';
+
+                                    // check if the filter is already prefixes with the table
+                                    if (substr($filter->getField(), 0, strlen($table_prefix)) !== $table_prefix) {
+                                        $filter->setField(
+                                            implode('.', [
+                                                $inner_query->getModel()->getTable(),
+                                                $filter->getField()
+                                            ])
+                                        );
+                                    } else {
+                                        $filter->setField($filter->getField());
+                                    }
                                     $this->applyFilter($inner_query, $filter);
                                 });
                             }
-                            foreach ($sorts as $sort) {
+                            /*foreach ($sorts as $sort) {
+
+                                // check if the sort is already prefixed with the table
+                                $table_prefix = $q->getModel()->getTable() . '.';
+                                $sort_suffix = $sort[0];
+                                if (substr($sort_suffix, 0, strlen($table_prefix)) !== $table_prefix) {
+                                    $sort_suffix = $table_prefix . $sort_suffix;
+                                }
+
                                 if (count($sort) == 2) {
                                     if ($sort[1] === 'DESC') {
-                                        $q->orderByDesc($sort[0]);
+                                        $q->orderByDesc($sort_suffix);
                                     } else {
-                                        $q->orderBy($sort[0]);
+                                        $q->orderBy($sort_suffix);
                                     }
                                 }
-                            }
+                            }*/
                         });
                     }
                 }
@@ -130,10 +147,12 @@ trait BuilderParamsApplierTrait
         }
 
         //:: Apply whereOr Connections And Any Connection Sorts
-        $or_where_has_connections = array_merge(
-            ($connection_or_filters ? array_keys($connection_or_filters) : []),
-            ($connection_sorts ? array_keys($connection_sorts) : [])
-        );
+        $or_where_has_connections = array_diff(array_unique(
+            array_merge(
+                ($connection_or_filters ? array_keys($connection_or_filters) : []),
+                []//($connection_sorts ? array_keys($connection_sorts) : [])
+            )
+        ), $where_has_connections);
 
         if (count($or_where_has_connections)) {
             $query->orWhere(function ($connection_query) use ($or_where_has_connections, $connection_sorts, $connection_or_filters) {
@@ -144,18 +163,39 @@ trait BuilderParamsApplierTrait
                         $connection_query->orWhereHas($connectionName, function ($q) use ($filters, $sorts) {
                             foreach ($filters as $filter) {
                                 $q->where(function ($inner_query) use ($filter) {
+                                    $table_prefix = $inner_query->getModel()->getTable() . '.';
+
+                                    // check if the filter is already prefixes with the table
+                                    if (substr($filter->getField(), 0, strlen($table_prefix)) !== $table_prefix) {
+                                        $filter->setField(
+                                            implode('.', [
+                                                $inner_query->getModel()->getTable(),
+                                                $filter->getField()
+                                            ])
+                                        );
+                                    } else {
+                                        $filter->setField($filter->getField());
+                                    }
                                     $this->applyFilter($inner_query, $filter);
                                 });
                             }
-                            foreach ($sorts as $sort) {
-                                if (count($sort) == 2) {
-                                    if ($sort[1] === 'DESC') {
-                                        $q->orderByDesc($sort[0]);
-                                    } else {
-                                        $q->orderBy($sort[0]);
-                                    }
-                                }
-                            }
+//                            foreach ($sorts as $sort) {
+//                                if (count($sort) == 2) {
+//
+//                                    // check if the sort is already prefixed with the table
+//                                    $table_prefix = $q->getModel()->getTable() . '.';
+//                                    $sort_suffix = $sort[0];
+//                                    if (substr($sort_suffix, 0, strlen($table_prefix)) !== $table_prefix) {
+//                                        $sort_suffix = $table_prefix . $sort_suffix;
+//                                    }
+//
+//                                    if ($sort[1] === 'DESC') {
+//                                        $q->orderByDesc($sort_suffix);
+//                                    } else {
+//                                        $q->orderBy($sort_suffix);
+//                                    }
+//                                }
+//                            }
                         });
                     }
                 }
@@ -206,8 +246,32 @@ trait BuilderParamsApplierTrait
 
         //:: Apply Connection Includes
         if (count($with)) {
+            foreach($connection_sorts as $connectionName => $sorts) {
+                unset($with[array_search($connectionName, $with)]);
+                $with[$connectionName] = function($q) use ($sorts) {
+                    foreach ($sorts as $sort) {
+                        if (count($sort) == 2) {
+
+                            // check if the sort is already prefixed with the table
+                            $table_prefix = $q->getModel()->getTable() . '.';
+                            $sort_suffix = $sort[0];
+                            if (substr($sort_suffix, 0, strlen($table_prefix)) !== $table_prefix) {
+                                $sort_suffix = $table_prefix . $sort_suffix;
+                            }
+
+                            if ($sort[1] === 'DESC') {
+                                $q->orderByDesc($sort_suffix);
+                            } else {
+                                $q->orderBy($sort_suffix);
+                            }
+                        }
+                    }
+                };
+            }
             $query->with($with);
         }
+        //var_dump($query->toSql());
+        //die();
 
         //:: Apply Pagination
         if ($params->hasPagination()) {
@@ -218,6 +282,7 @@ trait BuilderParamsApplierTrait
         } else {
             $paginator = $query->paginate($query->count(), ['*'], 'page', 1);
         }
+
 
         //print_r($query->toSql());
 
